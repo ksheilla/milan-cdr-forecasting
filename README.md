@@ -76,7 +76,7 @@ regenerate them locally.
 
 ## Setup
 
-Requires Python 3.10+.
+Requires Python 3.11+. Developed and tested on Python 3.14.0 (Windows).
 
 ```bash
 python -m venv venv
