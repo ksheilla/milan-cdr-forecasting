@@ -1,13 +1,18 @@
-import os
 import glob
-import time
+import os
 import threading
-import psutil
-import pandas as pd
-import numpy as np
+import time
 
-DATA_DIR = "dataverse Files"
-OUTPUT_PARQUET = "milan_internet_optimized.parquet"
+import pandas as pd
+import psutil
+
+from config import DATA_RAW_DIR, PARQUET_WRITE_PATH
+
+# Paths now come from config.py, so this script writes to the SAME location
+# step2/step4/step5 read from, and works regardless of the directory it is
+# launched from.
+DATA_DIR = DATA_RAW_DIR
+OUTPUT_PARQUET = PARQUET_WRITE_PATH
 
 
 def get_memory_usage_mb():
@@ -60,7 +65,7 @@ def measure_naive_baseline(sample_file):
     print(f"Naive load memory usage for 1 file: {naive_mem_used:.2f} MB")
     print(f"Naive dtypes:\n{naive_df.dtypes}")
 
-    del naive_df  
+    del naive_df
     return naive_mem_used
 
 
@@ -89,10 +94,12 @@ def measure_optimized_single_file(sample_file):
 
 
 def process_and_optimize():
-    file_list = sorted(glob.glob(os.path.join(DATA_DIR, "sms-call-internet-mi-*")))
+    file_list = sorted(glob.glob(os.path.join(str(DATA_DIR), "sms-call-internet-mi-*")))
 
     if not file_list:
-        print("No raw text files found in directory!")
+        print(f"No raw text files found in: {DATA_DIR}")
+        print("Download the 62 sms-call-internet-mi-*.txt files from Harvard "
+              "Dataverse and place them in that folder. See README.md.")
         return
 
     # Step A: baseline vs optimized comparison on a single file
@@ -148,6 +155,7 @@ def process_and_optimize():
     print("DATA PROCESSING & MEMORY OPTIMIZATION SUMMARY")
     print("=" * 50)
     print(f"Total Processing Time: {end_time - start_time:.2f} seconds")
+    print(f"Output Parquet: {OUTPUT_PARQUET}")
     print(f"Optimized Parquet Disk Size: {file_size_mb:.2f} MB")
     print(f"True Peak Memory Usage (continuously sampled): {true_peak_mb:.2f} MB")
     print(f"Total Rows Processed: {len(full_df):,}")

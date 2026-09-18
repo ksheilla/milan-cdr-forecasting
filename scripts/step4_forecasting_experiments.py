@@ -1,19 +1,17 @@
-import os
-import time
 import platform
-import itertools
+import time
+
+import lightgbm as lgb
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.metrics import mean_absolute_error, mean_squared_error
-from sklearn.preprocessing import MinMaxScaler
-import lightgbm as lgb
 import torch
 import torch.nn as nn
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, TensorDataset
 
-os.makedirs("results", exist_ok=True)
-os.makedirs("figures", exist_ok=True)
+from config import FIGURES_DIR, RESULTS_DIR, require_parquet
 
 np.random.seed(42)
 torch.manual_seed(42)
@@ -21,9 +19,8 @@ torch.manual_seed(42)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Hardware: {platform.processor() or platform.machine()}, device = {DEVICE}")
 
-PARQUET_PATH = os.path.join("data", "processed", "milan_internet_optimized.parquet") if os.path.exists(os.path.join("data", "processed")) else "milan_internet_optimized.parquet"
 print("Loading dataset...")
-df = pd.read_parquet(PARQUET_PATH)
+df = pd.read_parquet(require_parquet())
 
 TARGET_SQUARES = [5161, 5059, 5259]
 TUNING_SQUARE = 5161  # tune once on the top-traffic area to keep runtime tractable;
@@ -67,6 +64,15 @@ class Chomp1d(nn.Module):
 
 
 class TCNForecaster(nn.Module):
+    # KNOWN LIMITATION (see scripts/tcn_corrected.py for the fix):
+    # This builds ONE convolution per entry of num_channels with dilation 2**i.
+    # With num_channels=(32, 64) and kernel_size=3 the receptive field is
+    #     1 + (3-1)*1 + (3-1)*2 = 7 timesteps = 70 minutes,
+    # even though SEQ_LEN = 144 timesteps (24 h) is fed in. 137 of the 144
+    # inputs cannot influence the output at all. The committed results in
+    # results/ were produced with this version, so it is left unchanged here
+    # for consistency between code and reported figures. Replacing it requires
+    # retraining and regenerating all TCN results.
     def __init__(self, input_dim=1, num_channels=(32, 64), kernel_size=3, dropout=0.2):
         super().__init__()
         layers = []
@@ -251,8 +257,8 @@ for cfg in lgb_grid:
 print(f"  Selected LightGBM config: {best_lgb_cfg} (val RMSE={best_lgb_rmse:.2f})")
 
 tuning_log_df = pd.DataFrame(tuning_log)
-tuning_log_df.to_csv("results/hyperparameter_tuning_log.csv", index=False)
-print("\nFull tuning log saved to results/hyperparameter_tuning_log.csv")
+tuning_log_df.to_csv(RESULTS_DIR / "hyperparameter_tuning_log.csv", index=False)
+print(f"\nFull tuning log saved to {RESULTS_DIR / 'hyperparameter_tuning_log.csv'}")
 
 # --- Step B: Final training (train+val combined) and evaluation on test week ---
 
@@ -302,7 +308,7 @@ for sq_id in TARGET_SQUARES:
     lstm_preds = predict_torch(lstm_model, X_test, scaler)
     lstm_exec_time = time.time() - t0
 
-    # TCN (best config, now truly causal)
+    # TCN (best config)
     tcn_model, tcn_train_time = train_tcn(X_train, y_train, **best_tcn_cfg, epochs=10)
     t0 = time.time()
     tcn_preds = predict_torch(tcn_model, X_test, scaler)
@@ -340,15 +346,15 @@ for sq_id in TARGET_SQUARES:
         plt.ylabel('Internet Traffic', fontsize=10)
         plt.legend(loc='upper right')
         plt.tight_layout()
-        plt.savefig(f"figures/forecast_{name}_sq{sq_id}.png", dpi=300)
+        plt.savefig(FIGURES_DIR / f"forecast_{name}_sq{sq_id}.png", dpi=300)
         plt.close()
 
 results_df = pd.DataFrame(results)
-results_df.to_csv("results/model_evaluation_metrics.csv", index=False)
+results_df.to_csv(RESULTS_DIR / "model_evaluation_metrics.csv", index=False)
 
 predictions_df = pd.DataFrame(predictions_log)
-predictions_df.to_csv("results/predictions_detailed.csv", index=False)
-print("Per-timestep predictions saved to results/predictions_detailed.csv")
+predictions_df.to_csv(RESULTS_DIR / "predictions_detailed.csv", index=False)
+print(f"Per-timestep predictions saved to {RESULTS_DIR / 'predictions_detailed.csv'}")
 
 print("\n" + "=" * 50)
 print("EXPERIMENT EVALUATION SUMMARY")
@@ -359,6 +365,5 @@ print(f"\nHyperparameters used (selected via validation on square {TUNING_SQUARE
 print(f"  LSTM: {best_lstm_cfg}")
 print(f"  TCN: {best_tcn_cfg}")
 print(f"  LightGBM: {best_lgb_cfg}")
-print("\nForecasting pipeline finished! 9 forecast plots saved in 'figures/',")
-print("evaluation metrics saved in 'results/model_evaluation_metrics.csv',")
-print("and the full tuning log saved in 'results/hyperparameter_tuning_log.csv'.")
+print(f"\nForecasting pipeline finished! 9 forecast plots saved in {FIGURES_DIR},")
+print(f"evaluation metrics and the full tuning log saved in {RESULTS_DIR}.")

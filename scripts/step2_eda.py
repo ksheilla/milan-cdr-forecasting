@@ -1,31 +1,32 @@
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.seasonal import seasonal_decompose
 from statsmodels.tsa.stattools import adfuller
-import os
+
+from config import FIGURES_DIR, require_parquet
 
 # Set style for academic reporting
 plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
-os.makedirs("figures", exist_ok=True)
 
-# Load optimized Parquet file
-PARQUET_PATH = os.path.join("data", "processed", "milan_internet_optimized.parquet") if os.path.exists(os.path.join("data", "processed")) else "milan_internet_optimized.parquet"
+# Load optimized Parquet file. require_parquet() resolves the path relative to
+# the project root (not the current working directory) and fails with an
+# actionable message if step1 has not been run yet.
 print("Loading optimized Parquet dataset...")
-df = pd.read_parquet(PARQUET_PATH)
+df = pd.read_parquet(require_parquet())
 
 # --- 1. Identify Top 3 Areas + 4159 & 4556 ---
 print("\nCalculating total traffic per grid square...")
 area_totals = df.groupby('square_id')['internet_traffic'].sum().sort_values(ascending=False)
 
 top_3 = area_totals.head(3)
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print("TOP 3 HIGH-TRAFFIC SQUARE IDs:")
 for rank, (sq_id, val) in enumerate(top_3.items(), 1):
     print(f"Rank {rank}: Square ID {sq_id} | Total Traffic: {val:,.2f}")
-print("="*50)
+print("=" * 50)
 
 top_1_id = top_3.index[0]
 target_squares = list(top_3.index) + [4159, 4556]
@@ -44,9 +45,9 @@ plt.xlabel("Total Internet Traffic (Millions of Units)", fontsize=10)
 plt.ylabel("Number of Grid Squares", fontsize=10)
 plt.yscale('log')
 plt.tight_layout()
-plt.savefig("figures/fig1_traffic_distribution.png", dpi=300)
+plt.savefig(FIGURES_DIR / "fig1_traffic_distribution.png", dpi=300)
 plt.close()
-print("Saved figures/fig1_traffic_distribution.png")
+print(f"Saved {FIGURES_DIR / 'fig1_traffic_distribution.png'}")
 
 # --- 3. Two-week comparison across 5 areas (resampled consistently) ---
 min_date = df['timestamp'].min()
@@ -79,9 +80,9 @@ plt.xlabel("Date", fontsize=11)
 plt.ylabel("Internet Traffic Activity", fontsize=11)
 plt.legend(loc='upper right')
 plt.tight_layout()
-plt.savefig("figures/fig2a_first_two_weeks_overlay.png", dpi=300)
+plt.savefig(FIGURES_DIR / "fig2a_first_two_weeks_overlay.png", dpi=300)
 plt.close()
-print("Saved figures/fig2a_first_two_weeks_overlay.png")
+print(f"Saved {FIGURES_DIR / 'fig2a_first_two_weeks_overlay.png'}")
 
 # Fig 2b: small multiples — each area on its own scale, for comparing SHAPE/PATTERN
 fig, axes = plt.subplots(len(target_squares), 1, figsize=(14, 14), sharex=True)
@@ -94,9 +95,9 @@ for ax, sq_id in zip(axes, target_squares):
 axes[-1].set_xlabel("Date")
 fig.suptitle("Internet Traffic Dynamics: First 2 Weeks (Individual Scales)", fontsize=14, fontweight='bold')
 plt.tight_layout()
-plt.savefig("figures/fig2b_first_two_weeks_small_multiples.png", dpi=300)
+plt.savefig(FIGURES_DIR / "fig2b_first_two_weeks_small_multiples.png", dpi=300)
 plt.close()
-print("Saved figures/fig2b_first_two_weeks_small_multiples.png")
+print(f"Saved {FIGURES_DIR / 'fig2b_first_two_weeks_small_multiples.png'}")
 
 # --- 4. Deep-dive statistical analysis on top area ---
 print(f"\nRunning Deep-Dive Statistical Analysis on Top Area (Square ID {top_1_id})...")
@@ -105,22 +106,22 @@ df_top = df[df['square_id'] == top_1_id].sort_values('timestamp').set_index('tim
 df_top = df_top.resample('10min').mean().interpolate(method='linear')
 
 adf_result = adfuller(df_top['internet_traffic'].dropna())
-print("\n" + "="*50)
+print("\n" + "=" * 50)
 print(f"ADF STATIONARITY TEST RESULTS (Square ID {top_1_id}):")
 print(f"ADF Statistic: {adf_result[0]:.4f}")
 print(f"p-value: {adf_result[1]:.4e}")
 print("Critical Values:")
 for key, val in adf_result[4].items():
     print(f"   {key}: {val:.4f}")
-print("="*50)
+print("=" * 50)
 
 fig, axes = plt.subplots(2, 1, figsize=(12, 6))
 plot_acf(df_top['internet_traffic'], lags=144, ax=axes[0], title=f"Autocorrelation (ACF) - Square ID {top_1_id} (24h Window)")
 plot_pacf(df_top['internet_traffic'], lags=144, ax=axes[1], title=f"Partial Autocorrelation (PACF) - Square ID {top_1_id} (24h Window)")
 plt.tight_layout()
-plt.savefig("figures/fig3_acf_pacf.png", dpi=300)
+plt.savefig(FIGURES_DIR / "fig3_acf_pacf.png", dpi=300)
 plt.close()
-print("Saved figures/fig3_acf_pacf.png")
+print(f"Saved {FIGURES_DIR / 'fig3_acf_pacf.png'}")
 
 one_week = df_top.iloc[:144 * 7]
 decomp = seasonal_decompose(one_week['internet_traffic'], model='additive', period=144)
@@ -129,8 +130,8 @@ fig = decomp.plot()
 fig.set_size_inches(12, 8)
 fig.suptitle(f"Seasonal Decomposition (1 Week) - Square ID {top_1_id}", fontsize=12, fontweight='bold')
 plt.tight_layout()
-plt.savefig("figures/fig4_seasonal_decomposition.png", dpi=300)
+plt.savefig(FIGURES_DIR / "fig4_seasonal_decomposition.png", dpi=300)
 plt.close()
-print("Saved figures/fig4_seasonal_decomposition.png")
+print(f"Saved {FIGURES_DIR / 'fig4_seasonal_decomposition.png'}")
 
-print("\nTask 2 EDA complete! Check the generated images in the 'figures/' folder.")
+print(f"\nTask 2 EDA complete! Check the generated images in: {FIGURES_DIR}")

@@ -1,14 +1,12 @@
-import os
-import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
-os.makedirs("figures", exist_ok=True)
-os.makedirs("results", exist_ok=True)
+from config import FIGURES_DIR, RESULTS_DIR
 
 print("Loading Step 4 outputs...")
-metrics_df = pd.read_csv("results/model_evaluation_metrics.csv")
-preds_df = pd.read_csv("results/predictions_detailed.csv", parse_dates=['timestamp'])
+metrics_df = pd.read_csv(RESULTS_DIR / "model_evaluation_metrics.csv")
+preds_df = pd.read_csv(RESULTS_DIR / "predictions_detailed.csv", parse_dates=['timestamp'])
 
 MODEL_ORDER = ['LightGBM', 'LSTM', 'TCN']
 SQUARES = sorted(preds_df['Square_ID'].unique())
@@ -28,9 +26,9 @@ ax.set_ylabel("MAE")
 ax.set_title("Model Comparison: MAE by Square", fontsize=13, fontweight='bold')
 ax.legend()
 plt.tight_layout()
-plt.savefig("figures/comparative_mae_barchart.png", dpi=300)
+plt.savefig(FIGURES_DIR / "comparative_mae_barchart.png", dpi=300)
 plt.close()
-print("Saved figures/comparative_mae_barchart.png")
+print(f"Saved {FIGURES_DIR / 'comparative_mae_barchart.png'}")
 
 # --- 2. Failure analysis: does error concentrate on weekends? ------------
 
@@ -60,9 +58,9 @@ ax.set_title("Failure Analysis: Mean Absolute Error by Day of Week", fontsize=13
 ax.legend()
 plt.xticks(rotation=30)
 plt.tight_layout()
-plt.savefig("figures/failure_dayofweek_analysis.png", dpi=300)
+plt.savefig(FIGURES_DIR / "failure_dayofweek_analysis.png", dpi=300)
 plt.close()
-print("\nSaved figures/failure_dayofweek_analysis.png")
+print(f"\nSaved {FIGURES_DIR / 'failure_dayofweek_analysis.png'}")
 
 # Quantify the weekend-vs-weekday gap per model, as direct evidence for the report
 weekend_gap = (
@@ -75,7 +73,7 @@ weekend_gap['Weekend_vs_Weekday_pct_increase'] = (
     (weekend_gap['Weekend_MAE'] - weekend_gap['Weekday_MAE']) / weekend_gap['Weekday_MAE'] * 100
 )
 weekend_gap = weekend_gap.reindex(MODEL_ORDER)
-weekend_gap.to_csv("results/weekend_vs_weekday_error.csv")
+weekend_gap.to_csv(RESULTS_DIR / "weekend_vs_weekday_error.csv")
 
 print("\n" + "=" * 60)
 print("WEEKEND VS. WEEKDAY ERROR (evidence for weekend-blindness hypothesis)")
@@ -86,8 +84,8 @@ print("=" * 60)
 # --- 3. Top individual worst-case errors, for concrete examples ----------
 
 top_errors = preds_df.sort_values('abs_error', ascending=False).head(15)
-top_errors.to_csv("results/top_worst_errors.csv", index=False)
-print("\nTop 15 single worst-case errors saved to results/top_worst_errors.csv")
+top_errors.to_csv(RESULTS_DIR / "top_worst_errors.csv", index=False)
+print(f"\nTop 15 single worst-case errors saved to {RESULTS_DIR / 'top_worst_errors.csv'}")
 print(top_errors[['Square_ID', 'Model', 'timestamp', 'actual', 'predicted', 'abs_error']].to_string(index=False))
 
 # --- 4. Zoomed-in plot around the single worst error, for a concrete example ---
@@ -110,8 +108,9 @@ plt.xlabel("Date")
 plt.ylabel("Internet Traffic")
 plt.legend()
 plt.tight_layout()
-plt.savefig("figures/failure_case_zoom.png", dpi=300)
+plt.savefig(FIGURES_DIR / "failure_case_zoom.png", dpi=300)
 plt.close()
-print(f"\nSaved figures/failure_case_zoom.png (zoomed around {worst_model} / Square {worst_sq} at {worst_ts})")
+print(f"\nSaved {FIGURES_DIR / 'failure_case_zoom.png'} "
+      f"(zoomed around {worst_model} / Square {worst_sq} at {worst_ts})")
 
 print("\nStep 5 analysis complete.")

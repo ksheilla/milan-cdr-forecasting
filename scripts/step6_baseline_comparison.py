@@ -1,14 +1,14 @@
 from __future__ import annotations
  
-import os
- 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
  
-PRED_PATH = os.path.join("results", "predictions_detailed.csv")
-OUT_CSV = os.path.join("results", "baseline_comparison.csv")
-OUT_FIG = os.path.join("figures", "baseline_skill_scores.png")
+from config import FIGURES_DIR, RESULTS_DIR
+ 
+PRED_PATH = RESULTS_DIR / "predictions_detailed.csv"
+OUT_CSV = RESULTS_DIR / "baseline_comparison.csv"
+OUT_FIG = FIGURES_DIR / "baseline_skill_scores.png"
  
 SEASONAL_PERIOD = 144  # 24 h at 10-minute resolution
 MODEL_ORDER = ["LightGBM", "LSTM", "TCN"]
@@ -27,10 +27,11 @@ def rmse(actual: np.ndarray, pred: np.ndarray) -> float:
 def mape(actual: np.ndarray, pred: np.ndarray) -> float:
     """MAPE with an explicit, reported guard on small denominators.
  
-    The original compute_mape() masked only exact zeros. No exact zeros occur
-    in these three squares, so that guard never fires and the reported MAPE is
-    sound *here* — but it would silently explode on a low-traffic square. We
-    mask on a relative floor instead and report how many points were dropped.
+    Step 4's compute_mape() masks only exact zeros. No exact zeros occur in
+    these three squares (the minimum observed value is ~108), so that guard
+    never fires and the reported MAPE is sound here — but it would break on a
+    low-traffic square. We mask on a relative floor instead and report how many
+    points were dropped.
     """
     floor = 0.01 * np.mean(actual)
     keep = actual > floor
@@ -45,10 +46,10 @@ def mape(actual: np.ndarray, pred: np.ndarray) -> float:
 def build_benchmarks(y: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Return {name: (actual_aligned, pred_aligned)} for each naive forecaster.
  
-    Each benchmark loses a different amount of warm-up at the start of the
-    test week, so we return the aligned pair rather than assuming a common
-    length. Comparisons against the models are made on the *intersection*
-    below, so nobody is scored on a subset the others did not see.
+    Each benchmark loses a different amount of warm-up at the start of the test
+    week, so we return the aligned pair rather than assuming a common length.
+    Models are re-scored below on the persistence alignment so the head-to-head
+    comparison is like-for-like.
     """
     return {
         "Persistence": (y[1:], y[:-1]),
@@ -58,13 +59,12 @@ def build_benchmarks(y: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
  
  
 def main() -> None:
-    if not os.path.exists(PRED_PATH):
+    if not PRED_PATH.exists():
         raise SystemExit(
-            f"{PRED_PATH} not found. Run scripts/step4_forecasting_experiments.py first."
+            f"\n{PRED_PATH} not found.\n"
+            f"Run the forecasting experiments first:\n"
+            f"    python scripts/step4_forecasting_experiments.py\n"
         )
- 
-    os.makedirs("results", exist_ok=True)
-    os.makedirs("figures", exist_ok=True)
  
     preds = pd.read_csv(PRED_PATH, parse_dates=["timestamp"])
     rows: list[dict] = []
@@ -83,8 +83,7 @@ def main() -> None:
         benchmarks = build_benchmarks(y)
  
         # Persistence defines the skill-score denominator. Every model is
-        # re-scored on the SAME aligned subset (drop the first observation) so
-        # the comparison is like-for-like.
+        # re-scored on the SAME aligned subset (drop the first observation).
         bench_actual, bench_pred = benchmarks["Persistence"]
         persistence_mae = mae(bench_actual, bench_pred)
         persistence_rmse = rmse(bench_actual, bench_pred)
@@ -166,6 +165,7 @@ def main() -> None:
         fontweight="bold",
     )
     ax.legend()
+    ax.margins(y=0.12)
     plt.tight_layout()
     plt.savefig(OUT_FIG, dpi=300)
     plt.close()
