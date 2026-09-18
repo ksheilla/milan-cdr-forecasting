@@ -26,41 +26,48 @@ characteristics?
 ## Key Findings
 
 - **Only LightGBM beat a naive persistence baseline.** Against `x̂(t+1) = x(t)`,
-  LightGBM improved MAE by 4.1–12.5% across the three squares, while LSTM
-  (−0.8% to −37.9%) and TCN (−12.8% to −94.6%) were both *worse than doing
+  LightGBM improved MAE by 4.1-12.5% across the three squares, while LSTM
+  (-15.5% to -30.5%) and TCN (-19.2% to -93.1%) were both *worse than doing
   nothing*. Absolute error rankings alone are therefore misleading, and the
   skill scores are reported alongside them throughout.
-- The ranking (LightGBM > LSTM > TCN) held consistently across all three
-  squares, even though hyperparameters were tuned only on the
-  highest-traffic square.
+- **LightGBM ranked first on every square, but the ordering of the two deep
+  models did not hold.** LSTM beat TCN on squares 5161 and 5259; on square
+  5059 the ordering reversed (TCN 97.06 vs LSTM 103.21). With a single
+  training seed per model, the LSTM-vs-TCN gap is not large enough to call
+  reliably.
+- **The corrected TCN is the most expensive model, not the cheapest.**
+  Widening its receptive field from 7 to 255 timesteps raised training time
+  from 39-77 s to 253-263 s, making it 2.3x slower than LSTM and 43-48x
+  slower than LightGBM - while accuracy did not improve.
 - Forecast difficulty varied substantially by area: the highest-traffic
-  square (5161) was markedly harder to predict for every model than the
-  other two, both in absolute error and in scale-normalized MAPE.
-- Failure analysis found that the largest prediction errors, across all
-  models, concentrated entirely on Square 5161's afternoon peak hours and
-  were consistently under-predictions — consistent with the systematic
-  bias of MSE-trained models toward the central tendency on volatile,
-  spiky signals.
+  square (5161) was hardest to predict for every model, both in absolute
+  error and in scale-normalized MAPE.
+- Failure analysis found that all 15 largest prediction errors belonged to
+  the TCN on Square 5161, were all under-predictions, and spread across the
+  whole active day (10:30-19:00) rather than clustering on the afternoon
+  peak as in the earlier run.
 - A weekend-specific error hypothesis was tested and **not supported** by
   the data (see `results/weekend_vs_weekday_error.csv`).
 
 ## Repository Structure
 
-\```
-cdr-traffic-prediction/
+```
+milan-cdr-forecasting/
 ├── scripts/
+│   ├── config.py                            # Shared project-root-anchored paths
 │   ├── step1_memory_optimization.py         # Raw data -> optimized Parquet
 │   ├── step2_eda.py                         # Exploratory data analysis
-│   ├── step3_related_work_model_selection.md # Related work review and model selection justification
+│   ├── step3_related_work_model_selection.md # Related work review and model selection
 │   ├── step4_forecasting_experiments.py     # Hyperparameter tuning + model training/eval
 │   ├── step5_evaluation_failure_analysis.py # Comparative viz + failure analysis
-│   ├── step6_baseline_comparison.py         # Naive baselines + forecast skill scores
-├── figures/                     # Generated plots (created by running the scripts)
-├── results/                     # Generated CSVs: metrics, tuning log, worst errors      # Full written report
-├── task3_related_work_model_selection.md
+│   └── step6_baseline_comparison.py         # Naive baselines + forecast skill scores
+├── figures/                     # Generated plots
+├── results/                     # Generated CSVs: metrics, tuning log, baselines
+├── final_report.pdf             # Full written report
+├── requirements.txt
 ├── .gitignore
 └── README.md
-\```
+```
 
 Raw data (`dataverse Files/`) and the generated `milan_internet_optimized.parquet`
 are **not included in this repository** since they exceed GitHub's file size
@@ -71,13 +78,13 @@ regenerate them locally.
 
 Requires Python 3.10+.
 
-\```bash
+```bash
 python -m venv venv
 venv\Scripts\activate        # Windows
 # source venv/bin/activate   # macOS/Linux
 
-pip install pandas numpy matplotlib seaborn statsmodels scikit-learn lightgbm torch psutil pyarrow
-\```
+pip install -r requirements.txt
+```
 
 ## Dataset
 
@@ -101,15 +108,16 @@ To obtain it:
 
 ## Reproducing the Pipeline
 
-Run scripts **from the project root** (not from inside `scripts/`), in this order:
+All paths are resolved relative to the project root by `scripts/config.py`, so the
+scripts run correctly from any working directory. Run them in this order:
 
-\```bash
+```bash
 python scripts/step1_memory_optimization.py
 python scripts/step2_eda.py
 python scripts/step4_forecasting_experiments.py
 python scripts/step5_evaluation_failure_analysis.py
 python scripts/step6_baseline_comparison.py
-\```
+```
 
 | Step | Script | What it does | Key outputs |
 |---|---|---|---|
@@ -120,9 +128,11 @@ python scripts/step6_baseline_comparison.py
 | 5 | `step5_evaluation_failure_analysis.py` | Comparative MAE bar chart, day-of-week failure analysis, weekend-vs-weekday hypothesis test, worst-error identification with a zoomed failure-case plot. | `figures/comparative_mae_barchart.png`, `figures/failure_*.png`, `results/weekend_vs_weekday_error.csv`, `results/top_worst_errors.csv` |
 | 6 | `step6_baseline_comparison.py` | Scores the three models against naive reference forecasters (persistence, 24-hour seasonal naive, drift-damped persistence) and computes MAE skill scores, establishing whether each model adds value over a trivial predictor. Reads Step 4's saved predictions, so no retraining is required. | `results/baseline_comparison.csv`, `figures/baseline_skill_scores.png` |
 
-**Note on runtime:** Step 4 includes hyperparameter tuning (9 additional
-model trainings) before the final evaluation, and everything runs on CPU
-only — expect this step to take several minutes.
+**Note on runtime:** Step 4 includes hyperparameter tuning (9 additional model
+trainings) before the final evaluation, and everything runs on CPU only. The
+7-layer TCN dominates the cost at ~260 s per square — expect roughly 25-35
+minutes in total. Steps 5 and 6 read Step 4's saved predictions and take a
+second or two each.
 
 ## Methodology Summary
 
@@ -141,8 +151,15 @@ only — expect this step to take several minutes.
 
 ## Limitations
 
-- The TCN implementation omits the residual/skip connections present in
-  the full architecture proposed by Bai et al. (2018).
+- Each model was trained once with a single seed. Between experimental runs
+  the LSTM's MAE moved by up to 25.8% with no change to its configuration,
+  because retuning the TCN altered the shared RNG state. Differences of the
+  size observed between LSTM and TCN cannot be resolved without repeated runs.
+- The comparison is confounded: LightGBM receives explicit calendar and
+  rolling-window features that the deep models do not, so the advantage of
+  the model class cannot be separated from that of the features.
+- The TCN implementation omits the residual/skip connections of Bai et al.
+  (2018), which are intended to make deep dilated stacks trainable.
 - All models, trained with MSE loss, systematically under-predict rare,
   high-magnitude traffic spikes.
 - Hyperparameter tuning used a small grid, tuned on a single square rather
