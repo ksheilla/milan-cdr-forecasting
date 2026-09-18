@@ -216,9 +216,9 @@ print(f"  Selected LSTM config: {best_lstm_cfg} (val RMSE={best_lstm_rmse:.2f})"
 
 # TCN grid
 tcn_grid = [
-    {'channels': (16, 32), 'kernel_size': 3, 'lr': 0.001},
-    {'channels': (32, 64), 'kernel_size': 3, 'lr': 0.001},
-    {'channels': (32, 64), 'kernel_size': 5, 'lr': 0.001},
+    {'channels': (32,) * 7, 'kernel_size': 3, 'lr': 0.001},   # RF = 255 steps
+    {'channels': (64,) * 7, 'kernel_size': 3, 'lr': 0.001},   # RF = 255 steps
+    {'channels': (32,) * 6, 'kernel_size': 5, 'lr': 0.001},   # RF = 253 steps
 ]
 best_tcn_cfg, best_tcn_rmse = None, np.inf
 for cfg in tcn_grid:
