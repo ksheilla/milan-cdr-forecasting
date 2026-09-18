@@ -64,15 +64,32 @@ class Chomp1d(nn.Module):
 
 
 class TCNForecaster(nn.Module):
-    # KNOWN LIMITATION (see scripts/tcn_corrected.py for the fix):
+    # RECEPTIVE FIELD BUG (found and fixed in this project):
     # This builds ONE convolution per entry of num_channels with dilation 2**i.
-    # With num_channels=(32, 64) and kernel_size=3 the receptive field is
+    # The original tuning grid only varied channel width and kernel size,
+    # never depth (num_channels' length) — which is the parameter that
+    # actually controls receptive field. With num_channels=(32, 64) and
+    # kernel_size=3 (2 layers), the receptive field is:
     #     1 + (3-1)*1 + (3-1)*2 = 7 timesteps = 70 minutes,
     # even though SEQ_LEN = 144 timesteps (24 h) is fed in. 137 of the 144
-    # inputs cannot influence the output at all. The committed results in
-    # results/ were produced with this version, so it is left unchanged here
-    # for consistency between code and reported figures. Replacing it requires
-    # retraining and regenerating all TCN results.
+    # inputs could not influence the output at all — no gradient path existed.
+    #
+    # Fix: the tcn_grid below now varies DEPTH (7 layers, kernel_size=3),
+    # giving a receptive field of 255 timesteps — comfortably covering the
+    # full 144-step window. All TCN results in results/ were regenerated
+    # with this corrected grid.
+    #
+    # Note: correcting the receptive field did NOT improve accuracy — MAE was
+    # roughly unchanged on square 5161 and worse on squares 5059/5259, while
+    # training time increased ~5-6x. The likely cause: this TCN has no
+    # residual connections (unlike Bai et al. 2018's full architecture), so a
+    # 7-layer plain stack is harder to train than a shallow one, even with a
+    # theoretically sufficient receptive field. See the report's Technical
+    # Decision / Limitations sections for the full discussion.
+    #
+    # The default num_channels=(32, 64) below is only a fallback signature
+    # default — every actual call in this script passes channels explicitly
+    # via tcn_grid / best_tcn_cfg.
     def __init__(self, input_dim=1, num_channels=(32, 64), kernel_size=3, dropout=0.2):
         super().__init__()
         layers = []
