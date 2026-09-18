@@ -25,9 +25,11 @@ characteristics?
 
 ## Key Findings
 
-- **LightGBM outperformed both LSTM and TCN on every accuracy metric
-  (MAE, RMSE, MAPE) across all three tested grid squares**, while training
-  roughly 15-20x faster than LSTM and 5-8x faster than TCN.
+- **Only LightGBM beat a naive persistence baseline.** Against `x̂(t+1) = x(t)`,
+  LightGBM improved MAE by 4.1–12.5% across the three squares, while LSTM
+  (−0.8% to −37.9%) and TCN (−12.8% to −94.6%) were both *worse than doing
+  nothing*. Absolute error rankings alone are therefore misleading, and the
+  skill scores are reported alongside them throughout.
 - The ranking (LightGBM > LSTM > TCN) held consistently across all three
   squares, even though hyperparameters were tuned only on the
   highest-traffic square.
@@ -52,10 +54,9 @@ cdr-traffic-prediction/
 │   ├── step3_related_work_model_selection.md # Related work review and model selection justification
 │   ├── step4_forecasting_experiments.py     # Hyperparameter tuning + model training/eval
 │   ├── step5_evaluation_failure_analysis.py # Comparative viz + failure analysis
-│   └── check_5259_data_quality.py           # Data quality diagnostic
+│   ├── step6_baseline_comparison.py         # Naive baselines + forecast skill scores
 ├── figures/                     # Generated plots (created by running the scripts)
-├── results/                     # Generated CSVs: metrics, tuning log, worst errors
-├── final_report_draft.md        # Full written report
+├── results/                     # Generated CSVs: metrics, tuning log, worst errors      # Full written report
 ├── task3_related_work_model_selection.md
 ├── .gitignore
 └── README.md
@@ -107,6 +108,7 @@ python scripts/step1_memory_optimization.py
 python scripts/step2_eda.py
 python scripts/step4_forecasting_experiments.py
 python scripts/step5_evaluation_failure_analysis.py
+python scripts/step6_baseline_comparison.py
 \```
 
 | Step | Script | What it does | Key outputs |
@@ -116,7 +118,7 @@ python scripts/step5_evaluation_failure_analysis.py
 | 3 | *(no script — literature review + model justification)* | See `step3_related_work_model_selection.md` | — |
 | 4 | `step4_forecasting_experiments.py` | Documented hyperparameter tuning (validation split, 3 configs per model) on the top square, then final training/evaluation of LSTM, TCN, and LightGBM across all 3 target squares on the Dec 16-22 test week. | `figures/forecast_*.png`, `results/model_evaluation_metrics.csv`, `results/hyperparameter_tuning_log.csv`, `results/predictions_detailed.csv` |
 | 5 | `step5_evaluation_failure_analysis.py` | Comparative MAE bar chart, day-of-week failure analysis, weekend-vs-weekday hypothesis test, worst-error identification with a zoomed failure-case plot. | `figures/comparative_mae_barchart.png`, `figures/failure_*.png`, `results/weekend_vs_weekday_error.csv`, `results/top_worst_errors.csv` |
-| — | `check_5259_data_quality.py` | One-off diagnostic verifying whether an anomalous low-traffic period for Square 5259 was real data or a missing-data artifact. | Console output only |
+| 6 | `step6_baseline_comparison.py` | Scores the three models against naive reference forecasters (persistence, 24-hour seasonal naive, drift-damped persistence) and computes MAE skill scores, establishing whether each model adds value over a trivial predictor. Reads Step 4's saved predictions, so no retraining is required. | `results/baseline_comparison.csv`, `figures/baseline_skill_scores.png` |
 
 **Note on runtime:** Step 4 includes hyperparameter tuning (9 additional
 model trainings) before the final evaluation, and everything runs on CPU
