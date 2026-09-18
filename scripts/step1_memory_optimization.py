@@ -8,9 +8,6 @@ import psutil
 
 from config import DATA_RAW_DIR, PARQUET_WRITE_PATH
 
-# Paths now come from config.py, so this script writes to the SAME location
-# step2/step4/step5 read from, and works regardless of the directory it is
-# launched from.
 DATA_DIR = DATA_RAW_DIR
 OUTPUT_PARQUET = PARQUET_WRITE_PATH
 

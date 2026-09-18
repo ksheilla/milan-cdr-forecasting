@@ -11,9 +11,6 @@ from config import FIGURES_DIR, require_parquet
 # Set style for academic reporting
 plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
 
-# Load optimized Parquet file. require_parquet() resolves the path relative to
-# the project root (not the current working directory) and fails with an
-# actionable message if step1 has not been run yet.
 print("Loading optimized Parquet dataset...")
 df = pd.read_parquet(require_parquet())
 
