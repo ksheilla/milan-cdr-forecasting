@@ -1,5 +1,4 @@
 ﻿# Environment for milan-cdr-forecasting
-# Python 3.14.0 (Windows). Direct dependencies, pinned from pip freeze.
 
 lightgbm==4.7.0
 matplotlib==3.10.8
