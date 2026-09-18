@@ -1,32 +1,66 @@
+"""
+step6_baseline_comparison.py — Naive reference forecasters and forecast-skill scoring.
+
+WHY THIS STEP EXISTS
+--------------------
+A one-step-ahead forecast at 10-minute resolution is an easy problem: the
+series is smooth at that timescale, so "the next value equals the current
+value" (persistence) is already a strong forecaster. Reporting MAE/RMSE for
+three learned models WITHOUT a naive reference tells the reader nothing about
+whether any of them added value. Standard forecasting practice (Hyndman &
+Athanasopoulos, *Forecasting: Principles and Practice*, ch. 5.2) is to report
+skill *relative to* a naive benchmark.
+
+This step adds three benchmarks and a skill score:
+
+  * Persistence (naive-1):     x_hat(t+1) = x(t)
+  * Seasonal naive (daily):    x_hat(t+1) = x(t+1-144)     (same time yesterday)
+  * Drift-damped persistence:  x_hat(t+1) = x(t) + 0.5*(x(t)-x(t-1))
+
+  Skill score (MAE) = 1 - MAE_model / MAE_persistence
+     > 0  model beats the benchmark
+     = 0  model is exactly as good as doing nothing
+     < 0  model is WORSE than doing nothing
+
+RUN ORDER NOTE
+--------------
+Despite being a "baseline", this must run AFTER step 4, because it reads that
+step's saved per-timestep predictions rather than retraining anything. It takes
+about a second.
+
+Run from anywhere:
+    python scripts/step6_baseline_comparison.py
+"""
+
 from __future__ import annotations
- 
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
- 
+
 from config import FIGURES_DIR, RESULTS_DIR
- 
+
 PRED_PATH = RESULTS_DIR / "predictions_detailed.csv"
 OUT_CSV = RESULTS_DIR / "baseline_comparison.csv"
 OUT_FIG = FIGURES_DIR / "baseline_skill_scores.png"
- 
+
 SEASONAL_PERIOD = 144  # 24 h at 10-minute resolution
 MODEL_ORDER = ["LightGBM", "LSTM", "TCN"]
- 
- 
+
+
 # --- metrics --------------------------------------------------------------
- 
+
 def mae(actual: np.ndarray, pred: np.ndarray) -> float:
     return float(np.mean(np.abs(actual - pred)))
- 
- 
+
+
 def rmse(actual: np.ndarray, pred: np.ndarray) -> float:
     return float(np.sqrt(np.mean((actual - pred) ** 2)))
- 
- 
+
+
 def mape(actual: np.ndarray, pred: np.ndarray) -> float:
     """MAPE with an explicit, reported guard on small denominators.
- 
+
     Step 4's compute_mape() masks only exact zeros. No exact zeros occur in
     these three squares (the minimum observed value is ~108), so that guard
     never fires and the reported MAPE is sound here — but it would break on a
@@ -39,13 +73,13 @@ def mape(actual: np.ndarray, pred: np.ndarray) -> float:
     if dropped:
         print(f"      [mape] excluded {dropped} points with actual <= {floor:.3f}")
     return float(np.mean(np.abs((actual[keep] - pred[keep]) / actual[keep])) * 100)
- 
- 
+
+
 # --- benchmarks -----------------------------------------------------------
- 
+
 def build_benchmarks(y: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
     """Return {name: (actual_aligned, pred_aligned)} for each naive forecaster.
- 
+
     Each benchmark loses a different amount of warm-up at the start of the test
     week, so we return the aligned pair rather than assuming a common length.
     Models are re-scored below on the persistence alignment so the head-to-head
@@ -56,8 +90,8 @@ def build_benchmarks(y: np.ndarray) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         "SeasonalNaive_24h": (y[SEASONAL_PERIOD:], y[:-SEASONAL_PERIOD]),
         "DriftDamped": (y[2:], y[1:-1] + 0.5 * (y[1:-1] - y[:-2])),
     }
- 
- 
+
+
 def main() -> None:
     if not PRED_PATH.exists():
         raise SystemExit(
@@ -65,10 +99,10 @@ def main() -> None:
             f"Run the forecasting experiments first:\n"
             f"    python scripts/step4_forecasting_experiments.py\n"
         )
- 
+
     preds = pd.read_csv(PRED_PATH, parse_dates=["timestamp"])
     rows: list[dict] = []
- 
+
     for square_id, per_square in preds.groupby("Square_ID"):
         # The actual series is identical across models; take it from any one.
         actual_series = (
@@ -77,17 +111,17 @@ def main() -> None:
             .set_index("timestamp")["actual"]
         )
         y = actual_series.to_numpy()
- 
+
         print(f"\n{'=' * 64}\nSquare {square_id}  (n = {len(y)} ten-minute intervals)\n{'=' * 64}")
- 
+
         benchmarks = build_benchmarks(y)
- 
+
         # Persistence defines the skill-score denominator. Every model is
         # re-scored on the SAME aligned subset (drop the first observation).
         bench_actual, bench_pred = benchmarks["Persistence"]
         persistence_mae = mae(bench_actual, bench_pred)
         persistence_rmse = rmse(bench_actual, bench_pred)
- 
+
         for name, (a, p) in benchmarks.items():
             rows.append(
                 {
@@ -102,7 +136,7 @@ def main() -> None:
                 }
             )
             print(f"  [benchmark] {name:18s} MAE={mae(a, p):8.2f}  RMSE={rmse(a, p):8.2f}")
- 
+
         print()
         for model_name in MODEL_ORDER:
             g = per_square[per_square["Model"] == model_name].sort_values("timestamp")
@@ -127,19 +161,19 @@ def main() -> None:
                 f"  [model]     {model_name:18s} MAE={model_mae:8.2f}  RMSE={rmse(a, p):8.2f}"
                 f"  skill={skill:+6.1f}%  -> {verdict}"
             )
- 
+
         print(f"\n  Reference: persistence MAE={persistence_mae:.2f}, RMSE={persistence_rmse:.2f}")
- 
+
     results = pd.DataFrame(rows)
     results.to_csv(OUT_CSV, index=False)
     print(f"\nSaved {OUT_CSV}")
- 
+
     # --- skill-score figure ------------------------------------------------
     models_only = results[results["Type"] == "model"]
     pivot = models_only.pivot(
         index="Square_ID", columns="Forecaster", values="MAE_skill_vs_persistence (%)"
     )[MODEL_ORDER]
- 
+
     fig, ax = plt.subplots(figsize=(9, 5))
     x = np.arange(len(pivot.index))
     width = 0.25
@@ -170,8 +204,7 @@ def main() -> None:
     plt.savefig(OUT_FIG, dpi=300)
     plt.close()
     print(f"Saved {OUT_FIG}")
- 
- 
+
+
 if __name__ == "__main__":
     main()
- 
