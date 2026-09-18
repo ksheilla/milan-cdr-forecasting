@@ -1,9 +1,19 @@
+# Raw dataset from Harvard Dataverse — too large for GitHub.
+# Scoped to the data folder, so requirements.txt is still tracked.
+dataverse Files/
 data/raw/
 data/processed/
-*.txt
+
+# Generated intermediate data
 *.parquet
 *.zip
+
+# Python
 __pycache__/
 *.pyc
 .venv/
+venv/
+
+# Editors
 .vscode/
+.idea/
