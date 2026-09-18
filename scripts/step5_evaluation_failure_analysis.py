@@ -11,7 +11,6 @@ preds_df = pd.read_csv(RESULTS_DIR / "predictions_detailed.csv", parse_dates=['t
 MODEL_ORDER = ['LightGBM', 'LSTM', 'TCN']
 SQUARES = sorted(preds_df['Square_ID'].unique())
 
-# --- 1. Comparative bar chart: MAE per model, grouped by square ----------
 
 pivot_mae = metrics_df.pivot(index='Square_ID', columns='Model', values='MAE')[MODEL_ORDER]
 
