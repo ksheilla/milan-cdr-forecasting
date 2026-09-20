@@ -25,7 +25,7 @@ df = pd.read_parquet(require_parquet())
 TARGET_SQUARES = [5161, 5059, 5259]
 TUNING_SQUARE = 5161  # tune once on the top-traffic area to keep runtime tractable;
                        # the resulting hyperparameters are then reused for all 3 areas
-                       # (stated explicitly here and in the report as a scope decision).
+                      
 SEQ_LEN = 144  # 24 hours at 10-minute resolution
 
 # Split points: tuning-train -> validation -> final test (assignment-mandated week)
